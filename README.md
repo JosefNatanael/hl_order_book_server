@@ -46,3 +46,6 @@ The WebSocket server comes with compression built-in. The compression ratio can 
 - This server does **not** show untriggered trigger orders.
 - It currently **does not** support spot order books.
 - The current implementation batches node outputs by block, making the order book a few milliseconds slower than a streaming implementation.
+
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 365 -nodes -subj "/C=US/ST=State/L=City/O=Organization/CN=localhost"
+cargo run --release --bin websocket_server -- --address 0.0.0.0 --port 8000 --cert-file cert.pem --key-file key.pem

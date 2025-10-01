@@ -30,6 +30,16 @@ use tokio::{
 use yawc::{FrameView, OpCode, WebSocket};
 
 pub async fn run_websocket_server(address: &str, ignore_spot: bool, compression_level: u32) -> Result<()> {
+    run_websocket_server_with_tls(address, ignore_spot, compression_level, None, None).await
+}
+
+pub async fn run_websocket_server_with_tls(
+    address: &str, 
+    ignore_spot: bool, 
+    compression_level: u32,
+    cert_path: Option<&str>,
+    key_path: Option<&str>
+) -> Result<()> {
     let (internal_message_tx, _) = channel::<Arc<InternalMessage>>(100);
 
     // Central task: listen to messages and forward them for distribution
@@ -62,15 +72,49 @@ pub async fn run_websocket_server(address: &str, ignore_spot: bool, compression_
     );
 
     let listener = TcpListener::bind(address).await?;
-    info!("WebSocket server running at ws://{address}");
-
-    if let Err(err) = axum::serve(listener, app.into_make_service()).await {
-        error!("Server fatal error: {err}");
-        std::process::exit(2);
+    
+    match (cert_path, key_path) {
+        (Some(_cert_path), Some(_key_path)) => {
+            // TLS mode - for now, we'll provide instructions for using a reverse proxy
+            error!("Direct TLS support is not implemented in this version.");
+            error!("To use WSS (secure WebSocket), please use a reverse proxy like nginx or traefik.");
+            error!("Configure your reverse proxy to:");
+            error!("1. Handle TLS termination with your certificate: {}", _cert_path);
+            error!("2. Handle TLS termination with your private key: {}", _key_path);
+            error!("3. Proxy WebSocket connections to this server at: {}", address);
+            error!("4. Set up WebSocket upgrade headers in your proxy configuration");
+            error!("");
+            error!("Example nginx configuration:");
+            error!("server {{");
+            error!("    listen 443 ssl;");
+            error!("    ssl_certificate {};", _cert_path);
+            error!("    ssl_certificate_key {};", _key_path);
+            error!("    location /ws {{");
+            error!("        proxy_pass http://{};", address);
+            error!("        proxy_http_version 1.1;");
+            error!("        proxy_set_header Upgrade $http_upgrade;");
+            error!("        proxy_set_header Connection \"Upgrade\";");
+            error!("        proxy_set_header Host $host;");
+            error!("    }}");
+            error!("}}");
+            error!("");
+            error!("Then connect to: wss://yourdomain.com/ws");
+            std::process::exit(1);
+        }
+        _ => {
+            // HTTP/WS mode
+            info!("WebSocket server running at ws://{address}");
+            
+            if let Err(err) = axum::serve(listener, app.into_make_service()).await {
+                error!("Server fatal error: {err}");
+                std::process::exit(2);
+            }
+        }
     }
 
     Ok(())
 }
+
 
 fn ws_handler(
     incoming: yawc::IncomingUpgrade,
